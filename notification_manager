@@ -1,0 +1,58 @@
+# This class is responsible for sending notifications with the deal flight details.
+
+import os
+import requests
+from twilio.rest import Client
+import smtplib as sp
+from data_manager import DataManager
+
+
+class NotificationManager:
+
+    def __init__(self):
+        self.Account_SID = os.environ['self.Account_SID']
+        self.Auth_Token = os.environ['self.Auth_Token']
+        self.from_number = os.environ['self.from_number']
+        self.to_number = os.environ['self.to_number']
+        self.client = None
+        self.message = None
+        self.my_mail = os.environ['self.my_mail']
+        self.user_mail = None
+        self.my_mail_password = os.environ['self.my_mail_password']
+        self.datamanager = DataManager()
+        self.email_len = 0
+        self.email_list = []
+
+    def send_message(self, price, city, departure_airport_code, local_departure, local_arrival):
+        self.client = Client(self.Account_SID, self.Auth_Token)
+        self.message = self.client.messages \
+            .create(
+            body=f"low price alert! Only £{price}! "
+                 f"to fly from Ankara-ESB to {city.capitalize()}-{departure_airport_code}, from "
+                 f"{local_departure} to {local_arrival}",
+            from_=self.from_number,
+            to=self.to_number,
+        )
+        print(self.message.status)
+
+    def send_emails(self, start_loop, price, city, departure_airport_code, local_departure, local_arrival):
+        start_loop += 2
+        url = f"{self.datamanager.sheety_users_put_get_endpoint}"
+        response = requests.get(url=url)
+        response.raise_for_status()
+        data = response.json()
+        self.email_len = [item for item in data['users']]
+
+        for n in range(len(self.email_len)):
+            self.email_list.append(data['users'][n]['email'])
+
+        for self.user_mail in self.email_list:
+            with sp.SMTP('outlook.office365.com', port=587) as connection:
+                connection.starttls()
+                connection.login(user=self.my_mail, password=self.my_mail_password)
+                connection.sendmail(from_addr=self.my_mail
+                                    , to_addrs=self.user_mail
+                                    , msg=f"Subject:low price alert!\n\nOnly {price}! "
+                                          f"to fly from Ankara-ESB to {city.capitalize()}-{departure_airport_code}, from "
+                                          f"{local_departure} to {local_arrival}", )
+        self.email_list = []
